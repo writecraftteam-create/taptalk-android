@@ -1,0 +1,63 @@
+
+name: Build TapTalk APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'TapTalk_Android_Project_Download_Fresh.zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Unpack project
+        run: unzip -q TapTalk_Android_Project_Download_Fresh.zip -d unpacked
+
+      - name: Locate Android project
+        id: project
+        shell: bash
+        run: |
+          build_file=$(find unpacked -path '*/app/build.gradle' -print -quit)
+          if [ -z "$build_file" ]; then
+            echo "Android project not found in ZIP" >&2
+            exit 1
+          fi
+          project_dir=$(dirname "$(dirname "$build_file")")
+          echo "dir=$project_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TapTalk-debug-apk
+          path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          
